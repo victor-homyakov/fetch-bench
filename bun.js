@@ -1,16 +1,13 @@
 import {readFileSync} from "fs";
 import pAll from "p-all";
+import {extractUrls, measure, warmup} from "./utils.js";
 
-const pkg = JSON.parse(readFileSync(new URL("1500-deps.json", import.meta.url)));
-const urls = Object.keys(pkg.devDependencies).map(name => `https://registry.npmjs.org/${name.replace(/\//g, "%2f")}`);
-const warmupUrls = urls.slice(0, 10);
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const json = readFileSync(new URL("1500-deps.json", import.meta.url));
+const urls = extractUrls(json);
 const opts = {concurrency: process.argv[2] ? Number(process.argv[2]) : 96};
 
-// warm up the JIT
-await warmupUrls.map(url => fetch(url).then(res => res.text()));
-await sleep(500);
+const getUrl = url => fetch(url).then(res => res.text());
+await warmup(urls, getUrl);
 
-const t2 = performance.now();
-await pAll(urls.map(url => () => fetch(url).then(res => res.text())), opts);
-console.info(`bun: ${Math.round(performance.now() - t2)}ms`);
+const promise = pAll(urls.map(url => () => getUrl(url)), opts);
+await measure('bun', promise);
